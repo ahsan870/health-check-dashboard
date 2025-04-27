@@ -1,0 +1,27 @@
+{
+    "base_urls": {
+      "dev": "https://www.pavelist.com", 
+      "sit": "https://www.pavelist.com",
+      "uat": "https://www.pavelist.co",
+      "prod": "https://www.pavelist.com"
+    },
+    "env_urls": {
+      "dev": [
+        {"name": "User Service", "path": "/classifieds"},
+        {"name": "Payment Gateway", "path": "/api/jobs"}
+      ],
+      "sit": [
+        {"name": "Search Service", "path": "/api/search"},
+        {"name": "Payment Gateway", "path": "/api/payment"}
+      ],
+      "uat": [
+        {"name": "Order Service", "path": "/api/orders"},
+        {"name": "Inventory Service", "path": "/api/inventory"}
+      ],
+      "prod": [
+        {"name": "User Service", "path": "/ejobss"},
+        {"name": "Payment Gateway", "path": "/jobs"}
+      ]
+    }
+  }
+  
