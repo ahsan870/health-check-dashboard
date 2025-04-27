@@ -6,6 +6,7 @@ import json
 import pandas as pd
 import os
 from dotenv import load_dotenv
+from urllib.parse import urljoin
 
 # Load .env file
 load_dotenv()
@@ -17,14 +18,23 @@ with open("config.json") as f:
 base_urls = config["base_urls"]
 env_urls = config["env_urls"]
 
-# Create a placeholder for the dashboard
+# Customize tab names here
+env_display_names = {
+    "dev": "DEV",
+    "sit": "SIT",
+    "uat": "UAT",
+    "prod": "PROD",
+    # Add more if you have more environments
+}
+
+# Set Streamlit page config
 st.set_page_config(page_title="🩺 Health Check Dashboard", layout="wide")
 st.title("🩺 Health Check Dashboard")
 status_placeholder = st.empty()
 
 # Async function to fetch service status
 async def fetch_status(client, env, svc):
-    url = base_urls[env] + svc["path"]
+    url = urljoin(base_urls[env], svc["path"])  # Safe URL joining
 
     # Fetch credentials from environment variables
     username = os.getenv(f"{env.upper()}_USERNAME")
@@ -35,11 +45,9 @@ async def fetch_status(client, env, svc):
         response = await client.get(
             url,
             timeout=5.0,
-            follow_redirects=True,
+            follow_redirects=False,
             auth=auth,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124 Safari/537.36"
-            }
+            headers={"User-Agent": "Mozilla/5.0"}
         )
         is_up = response.status_code == 200
     except Exception as e:
@@ -71,29 +79,44 @@ def run_health_check_loop():
 
         df = pd.DataFrame(statuses)
 
-        # Color the 'Status' column
-        def color_status(val):
-            if "UP" in val:
-                return 'background-color: #d4edda; color: green; font-weight: bold'
-            else:
-                return 'background-color: #f8d7da; color: red; font-weight: bold'
-
-        styled_df = df.style.applymap(color_status, subset=["Status"])
-
         with status_placeholder.container():
             st.write(f"Last Checked: {check_time}")
-            st.dataframe(styled_df, use_container_width=True)
 
-            # 🎯 Corrected Download CSV
-            csv_text = f"Last Checked: {check_time}\n\n"
-            csv_text += df.to_csv(index=False)
+            # Prepare tabs with custom display names
+            environments = df["Environment"].unique().tolist()
+            tab_labels = [env_display_names.get(env, env.upper()) for env in environments]
+            tabs = st.tabs(tab_labels)
 
-            st.download_button(
-                label="⬇️ Download Report CSV",
-                data=csv_text.encode('utf-8'),
-                file_name=f'health_check_report_{check_time.replace(" ", "_").replace(":", "-")}.csv',
-                mime='text/csv',
-            )
+            for env, tab in zip(environments, tabs):
+                env_df = df[df["Environment"] == env].copy()
+
+                # Optional: Sort DOWN first
+                env_df["SortOrder"] = env_df["Status"].apply(lambda x: 0 if "DOWN" in x else 1)
+                env_df = env_df.sort_values("SortOrder").drop(columns=["SortOrder"]).reset_index(drop=True)
+
+                # Color the 'Status' column
+                def color_status(val):
+                    if "UP" in val:
+                        return 'background-color: #d4edda; color: green; font-weight: bold'
+                    else:
+                        return 'background-color: #f8d7da; color: red; font-weight: bold'
+
+                styled_env_df = env_df.style.applymap(color_status, subset=["Status"])
+
+                with tab:
+                    st.subheader(f"Environment: {env_display_names.get(env, env.upper())}")
+                    st.dataframe(styled_env_df, use_container_width=True)
+
+                    # 🎯 Download CSV for this environment
+                    csv_text = f"Last Checked: {check_time}\n\n"
+                    csv_text += env_df.to_csv(index=False)
+
+                    st.download_button(
+                        label=f"⬇️ Download {env_display_names.get(env, env.upper())} Report CSV",
+                        data=csv_text.encode('utf-8'),
+                        file_name=f'{env}_health_check_report_{check_time.replace(" ", "_").replace(":", "-")}.csv',
+                        mime='text/csv',
+                    )
 
         time.sleep(60)
 
